@@ -1,0 +1,156 @@
+﻿{
+    "name":  "Agent 3 â€” Restructuring Brief",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "restructuring-brief",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "ag3-node-01",
+                      "name":  "Webhook",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2,
+                      "position":  [
+                                       240,
+                                       300
+                                   ],
+                      "webhookId":  "restructuring-brief"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "// Agent 3 â€” Restructuring Brief\n// Input: compte Google Ads structurÃ©\n// {\n//   account_name: string,\n//   monthly_budget: number,\n//   campaigns: [\n//     {\n//       name: string,\n//       type: string,           // Search / Shopping / PMax / Display\n//       status: string,         // enabled / paused\n//       budget_daily: number,\n//       spend_30d: number,\n//       conversions_30d: number,\n//       cpa_30d: number,\n//       roas_30d: number,       // optionnel\n//       impression_share: number, // 0-1\n//       quality_score_avg: number, // 1-10\n//       ad_groups_count: number,\n//       keywords_count: number,\n//       top_issues: string[]    // ex: [\u0027faible QS\u0027, \u0027chevauchement keywords\u0027]\n//     }\n//   ],\n//   objectives: string,         // ex: \u0027reduire CPL de 20% en 3 mois\u0027\n//   industry: string,           // ex: \u0027SaaS B2B\u0027, \u0027e-commerce mode\u0027\n//   target_cpa: number          // optionnel\n// }\n\nconst body = $input.first().json.body ?? $input.first().json;\n\nif (!body.campaigns || !Array.isArray(body.campaigns) || body.campaigns.length === 0) {\n  throw new Error(\u0027Body requis : { campaigns: [...], account_name, monthly_budget, objectives, industry }\u0027);\n}\n\n// Formatter les campagnes en tableau lisible pour Claude\nconst campRows = body.campaigns.map(c =\u003e {\n  return [\n    `Campagne: ${c.name}`,\n    `  Type: ${c.type || \u0027N/A\u0027} | Statut: ${c.status || \u0027N/A\u0027}`,\n    `  Budget/jour: ${c.budget_daily ? c.budget_daily + \u0027 EUR\u0027 : \u0027N/A\u0027} | Spend 30j: ${c.spend_30d ? c.spend_30d + \u0027 EUR\u0027 : \u0027N/A\u0027}`,\n    `  Conversions 30j: ${c.conversions_30d ?? \u0027N/A\u0027} | CPA 30j: ${c.cpa_30d ? c.cpa_30d + \u0027 EUR\u0027 : \u0027N/A\u0027} | ROAS: ${c.roas_30d ?? \u0027N/A\u0027}`,\n    `  IS: ${c.impression_share ? (c.impression_share * 100).toFixed(0) + \u0027%\u0027 : \u0027N/A\u0027} | QS moyen: ${c.quality_score_avg ?? \u0027N/A\u0027}/10`,\n    `  Groupes: ${c.ad_groups_count ?? \u0027N/A\u0027} | Keywords: ${c.keywords_count ?? \u0027N/A\u0027}`,\n    c.top_issues \u0026\u0026 c.top_issues.length \u003e 0 ? `  Problemes: ${c.top_issues.join(\u0027, \u0027)}` : \u0027\u0027\n  ].filter(Boolean).join(\u0027\\n\u0027);\n}).join(\u0027\\n\\n\u0027);\n\nconst context = [\n  `Compte : ${body.account_name || \u0027Non specifie\u0027}`,\n  `Budget mensuel : ${body.monthly_budget ? body.monthly_budget + \u0027 EUR\u0027 : \u0027Non specifie\u0027}`,\n  `Secteur : ${body.industry || \u0027Non specifie\u0027}`,\n  `Objectif : ${body.objectives || \u0027Non specifie\u0027}`,\n  body.target_cpa ? `CPA cible : ${body.target_cpa} EUR` : \u0027\u0027\n].filter(Boolean).join(\u0027\\n\u0027);\n\nconst userMsg = `CONTEXTE DU COMPTE :\\n${context}\\n\\nCAMPAGNES :\\n${campRows}\\n\\nGENERE UN BRIEF DE RESTRUCTURATION GOOGLE ADS complet.`;\n\nreturn [{ json: { userMsg, accountName: body.account_name || \u0027Compte\u0027, campaignCount: body.campaigns.length } }];\n"
+                                     },
+                      "id":  "ag3-node-02",
+                      "name":  "Parse Account Data",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       500,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.anthropic.com/v1/messages",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "anthropic-version",
+                                                                                         "value":  "2023-06-01"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ JSON.stringify({ model: \u0027claude-sonnet-4-6\u0027, max_tokens: 4096, system: \u0027Tu es un expert Google Ads avec 10 ans d experience en gestion de comptes Performance et Acquisition. Tu analyses la structure d un compte Google Ads et produis un brief de restructuration actionnable.\\n\\nTon brief doit contenir exactement ces 5 sections :\\n\\n## 1. DIAGNOSTIC RAPIDE\\nEtat actuel du compte en 5 bullet points max. Identifier les 2-3 problemes principaux.\\n\\n## 2. ARCHITECTURE RECOMMANDEE\\nStructure optimale proposee : campagnes a garder / fusionner / creer / supprimer. Justifier chaque decision.\\n\\n## 3. QUICK WINS (0-2 semaines)\\n3 a 5 actions immediates a impact fort : ajustements encheres, exclusions, budgets, extensions. Chaque action : action + impact attendu + priorite (HIGH/MED/LOW).\\n\\n## 4. REDISTRIBUTION BUDGET\\nRecommandation de repartition budgetaire par campagne/objectif. Inclure la logique de priorisation.\\n\\n## 5. ROADMAP 90 JOURS\\nPhase 1 (J1-J14) : actions immediates\\nPhase 2 (J15-J45) : optimisations structurelles\\nPhase 3 (J46-J90) : scaling et tests\\n\\nSois concret, chiffre quand possible, et adapte au secteur et aux objectifs du compte.\u0027, messages: [{ role: \u0027user\u0027, content: $json.userMsg }] }) }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "ag3-node-03",
+                      "name":  "Claude â€” Generate Brief",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       760,
+                                       300
+                                   ],
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "YOUR_ANTHROPIC_CREDENTIAL_ID",
+                                                                 "name":  "Anthropic Header Auth"
+                                                             }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "// Formatter la rÃ©ponse Claude en brief structurÃ©\nconst item = $input.first();\nconst claudeResp = item.json;\n\nconst text = claudeResp.content \u0026\u0026 claudeResp.content[0] ? claudeResp.content[0].text : JSON.stringify(claudeResp);\n\n// Metadata de l\u0027appel\nconst usage = claudeResp.usage || {};\n\nreturn [{\n  json: {\n    brief: text,\n    model: claudeResp.model || \u0027claude-sonnet-4-6\u0027,\n    tokens_used: (usage.input_tokens || 0) + (usage.output_tokens || 0),\n    generated_at: new Date().toISOString()\n  }\n}];\n"
+                                     },
+                      "id":  "ag3-node-04",
+                      "name":  "Format Brief",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1020,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ $json }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "ag3-node-05",
+                      "name":  "Respond",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1280,
+                                       300
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "Parse Account Data",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "Parse Account Data":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Claude â€” Generate Brief",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Claude â€” Generate Brief":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Format Brief",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Format Brief":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "Respond",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "staticData":  null
+}
