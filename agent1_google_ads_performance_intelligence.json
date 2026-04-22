@@ -1,0 +1,277 @@
+﻿{
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "availableInMCP":  false
+                 },
+    "name":  "Google Ads Performance Intelligence Agent",
+    "connections":  {
+                        "Hebdo — Lundi 7h":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Config (IDs client)",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Test manuel":  {
+                                            "main":  [
+                                                         [
+                                                             {
+                                                                 "node":  "Config (IDs client)",
+                                                                 "type":  "main",
+                                                                 "index":  0
+                                                             }
+                                                         ]
+                                                     ]
+                                        },
+                        "Config (IDs client)":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Google Ads — GAQL 14j [CREDENTIALS]",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Google Ads — GAQL 14j [CREDENTIALS]":  {
+                                                                    "main":  [
+                                                                                 [
+                                                                                     {
+                                                                                         "node":  "Analyze — Output A (table) + anomalies",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     }
+                                                                                 ]
+                                                                             ]
+                                                                },
+                        "Analyze — Output A (table) + anomalies":  {
+                                                                       "main":  [
+                                                                                    [
+                                                                                        {
+                                                                                            "node":  "Interpret — Claude Output B [CREDENTIALS]",
+                                                                                            "type":  "main",
+                                                                                            "index":  0
+                                                                                        }
+                                                                                    ]
+                                                                                ]
+                                                                   },
+                        "Interpret — Claude Output B [CREDENTIALS]":  {
+                                                                          "main":  [
+                                                                                       [
+                                                                                           {
+                                                                                               "node":  "Recommend — Assembler A + B (email)",
+                                                                                               "type":  "main",
+                                                                                               "index":  0
+                                                                                           }
+                                                                                       ]
+                                                                                   ]
+                                                                      },
+                        "Recommend — Assembler A + B (email)":  {
+                                                                    "main":  [
+                                                                                 [
+                                                                                     {
+                                                                                         "node":  "Gmail — Envoyer rapport [CREDENTIALS]",
+                                                                                         "type":  "main",
+                                                                                         "index":  0
+                                                                                     }
+                                                                                 ]
+                                                                             ]
+                                                                }
+                    },
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "rule":  {
+                                                      "interval":  [
+                                                                       {
+                                                                           "field":  "cronExpression",
+                                                                           "expression":  "0 7 * * 1"
+                                                                       }
+                                                                   ]
+                                                  }
+                                     },
+                      "id":  "pia-schedule",
+                      "name":  "Hebdo — Lundi 7h",
+                      "type":  "n8n-nodes-base.scheduleTrigger",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       0,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "pia-manual",
+                      "name":  "Test manuel",
+                      "type":  "n8n-nodes-base.manualTrigger",
+                      "typeVersion":  1,
+                      "position":  [
+                                       0,
+                                       220
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "assignments":  {
+                                                             "assignments":  [
+                                                                                 {
+                                                                                     "id":  "cfg-cid",
+                                                                                     "name":  "customerId",
+                                                                                     "value":  "={{ $env.GOOGLE_ADS_CUSTOMER_ID || \u0027REMPLACEZ_PAR_CUSTOMER_ID\u0027 }}",
+                                                                                     "type":  "string"
+                                                                                 },
+                                                                                 {
+                                                                                     "id":  "cfg-login",
+                                                                                     "name":  "loginCustomerId",
+                                                                                     "value":  "={{ $env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || \u0027\u0027 }}",
+                                                                                     "type":  "string"
+                                                                                 }
+                                                                             ]
+                                                         },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "pia-config",
+                      "name":  "Config (IDs client)",
+                      "type":  "n8n-nodes-base.set",
+                      "typeVersion":  3.4,
+                      "position":  [
+                                       240,
+                                       120
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "=https://googleads.googleapis.com/v18/customers/{{ $json.customerId }}/googleAds:search",
+                                         "authentication":  "predefinedCredentialType",
+                                         "nodeCredentialType":  "googleAdsOAuth2Api",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "developer-token",
+                                                                                         "value":  "={{ $env.GOOGLE_ADS_DEVELOPER_TOKEN }}"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "login-customer-id",
+                                                                                         "value":  "={{ $json.loginCustomerId }}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={\"query\": \"SELECT campaign.id, campaign.name, segments.date, metrics.impressions, metrics.clicks, metrics.cost_micros, metrics.conversions, metrics.ctr, metrics.average_cpc, metrics.search_impression_share, metrics.search_budget_lost_impression_share FROM campaign WHERE segments.date DURING LAST_14_DAYS AND campaign.status != \u0027REMOVED\u0027\"}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "pia-gaql",
+                      "name":  "Google Ads — GAQL 14j [CREDENTIALS]",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       500,
+                                       120
+                                   ],
+                      "notesInFlow":  true,
+                      "notes":  "Collect (LP). Rattacher credential Google Ads OAuth2 + GOOGLE_ADS_DEVELOPER_TOKEN."
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const item = $input.first().json;\nconst rows = item.results || [];\n\nfunction agg(days) {\n  let imp = 0, clk = 0, cost = 0, conv = 0;\n  for (const d of days) {\n    imp += d.impressions; clk += d.clicks; cost += d.costMicros; conv += d.conversions;\n  }\n  const ctr = imp ? clk / imp : 0;\n  const cpa = conv \u003e 0 ? (cost / 1e6) / conv : null;\n  return { impressions: imp, clicks: clk, costEuros: cost / 1e6, conversions: conv, ctr, cpa };\n}\n\nconst byCampaign = {};\nfor (const r of rows) {\n  const name = r.campaign?.name || \u0027Inconnu\u0027;\n  const id = String(r.campaign?.id ?? name);\n  const date = r.segments?.date || \u0027\u0027;\n  const m = r.metrics || {};\n  const day = {\n    date,\n    impressions: Number(m.impressions || 0),\n    clicks: Number(m.clicks || 0),\n    costMicros: Number(m.costMicros || 0),\n    conversions: Number(m.conversions || 0),\n    ctr: Number(m.ctr || 0),\n    averageCpcMicros: Number(m.averageCpc || 0),\n    searchImpressionShare: m.searchImpressionShare != null ? Number(m.searchImpressionShare) : null,\n    searchBudgetLostIS: m.searchBudgetLostImpressionShare != null ? Number(m.searchBudgetLostImpressionShare) : null,\n  };\n  if (!byCampaign[id]) byCampaign[id] = { name, days: [] };\n  byCampaign[id].days.push(day);\n}\n\nconst anomalies = [];\nfor (const [id, c] of Object.entries(byCampaign)) {\n  c.days.sort((a, b) =\u003e String(a.date).localeCompare(String(b.date)));\n  const d14 = c.days.slice(-14);\n  const last7 = d14.slice(-7);\n  const prev7 = d14.slice(-14, -7);\n  if (last7.length \u003c 2) continue;\n  const A = agg(last7);\n  const B = prev7.length \u003e= 2 ? agg(prev7) : null;\n  if (B \u0026\u0026 B.cpa \u0026\u0026 A.cpa \u0026\u0026 A.cpa \u003e B.cpa * 1.15) {\n    anomalies.push({ campaign: c.name, type: \u0027CPA_UP\u0027, deltaPct: Math.round((A.cpa / B.cpa - 1) * 100), last7: A, prev7: B });\n  }\n  if (B \u0026\u0026 B.ctr \u003e 0.01 \u0026\u0026 A.ctr \u003c B.ctr * 0.85) {\n    anomalies.push({ campaign: c.name, type: \u0027CTR_DOWN\u0027, last7: A, prev7: B });\n  }\n  const maxLost = Math.max(0, ...last7.map(d =\u003e d.searchBudgetLostIS || 0));\n  if (maxLost \u003e 0.25) {\n    anomalies.push({ campaign: c.name, type: \u0027IS_BUDGET_LOST_HIGH\u0027, maxBudgetLostShare: maxLost });\n  }\n}\n\nconst anomalyByCampaign = {};\nfor (const a of anomalies) {\n  if (!anomalyByCampaign[a.campaign]) anomalyByCampaign[a.campaign] = [];\n  const label = a.type === \u0027CPA_UP\u0027 ? \u0027CPA drift\u0027 : a.type === \u0027CTR_DOWN\u0027 ? \u0027CTR drop\u0027 : a.type === \u0027IS_BUDGET_LOST_HIGH\u0027 ? \u0027IS Lost budget\u0027 : a.type;\n  anomalyByCampaign[a.campaign].push(label);\n}\n\nconst tableRows = [];\nfor (const [id, c] of Object.entries(byCampaign)) {\n  c.days.sort((a, b) =\u003e String(a.date).localeCompare(String(b.date)));\n  const d14 = c.days.slice(-14);\n  const last7 = d14.slice(-7);\n  const prev7 = d14.slice(-14, -7);\n  if (last7.length \u003c 1) continue;\n  const A = agg(last7);\n  const B = prev7.length \u003e= 1 ? agg(prev7) : null;\n  const cpaStr = A.cpa != null ? (A.cpa.toFixed(2) + \u0027 EUR\u0027) : \u0027–\u0027;\n  let deltaStr = \u0027–\u0027;\n  if (B \u0026\u0026 B.cpa \u0026\u0026 A.cpa) deltaStr = Math.round((A.cpa / B.cpa - 1) * 100) + \u0027%\u0027;\n  else if (B \u0026\u0026 !A.cpa \u0026\u0026 !B.cpa) deltaStr = \u0027N/A\u0027;\n  const ctrStr = (A.ctr * 100).toFixed(1) + \u0027%\u0027;\n  const cvrStr = A.clicks \u003e 0 ? ((A.conversions / A.clicks) * 100).toFixed(1) + \u0027%\u0027 : \u0027–\u0027;\n  const maxLost = Math.max(0, ...last7.map(d =\u003e d.searchBudgetLostIS || 0));\n  const isLostStr = maxLost \u003e 0 ? (Math.round(maxLost * 100) + \u0027%\u0027) : \u0027–\u0027;\n  const nm = String(c.name).replace(/\\|/g, \u0027/\u0027).substring(0, 40);\n  const anoList = anomalyByCampaign[c.name] || [];\n  const anoStr = anoList.length ? anoList.join(\u0027; \u0027) : \u0027–\u0027;\n  const statut = anoList.length ? \u0027Alerte\u0027 : \u0027OK\u0027;\n  tableRows.push({ campaign: nm, cpa: cpaStr, delta: deltaStr, ctr: ctrStr, cvr: cvrStr, isLost: isLostStr, anomalie: anoStr, statut });\n}\n\nconst performanceTableMarkdown = [\n  \u0027| Campagne | CPA (7j) | Delta vs 7j prec. | CTR | CVR | IS Lost (budget) | Anomalie | Statut |\u0027,\n  \u0027|---|---|---|---|---|---|---|---|\u0027,\n  ...tableRows.map(r =\u003e \u0027| \u0027 + [r.campaign, r.cpa, r.delta, r.ctr, r.cvr, r.isLost, r.anomalie, r.statut].join(\u0027 | \u0027) + \u0027 |\u0027),\n].join(\u0027\\n\u0027);\n\nconst payload = {\n  periode: \u0027LAST_14_DAYS (7j vs 7j precedent)\u0027,\n  nombreCampagnes: Object.keys(byCampaign).length,\n  anomalies,\n  outputA_tableMarkdown: performanceTableMarkdown,\n  resumeCampagnes: Object.entries(byCampaign).map(([id, v]) =\u003e ({ id, name: v.name, jours: v.days.length })),\n};\n\nconst prompt = `Tu rediges uniquement l\u0027**Output B** (rapport narratif) pour Automation Act, en francais. Sections obligatoires : PERFORMANCE OVERVIEW, INSIGHTS DETECTES, HYPOTHESES, NEXT ACTIONS (cases a cocher style [ ] / [x]).\\n\\nNe recopie pas le tableau des campagnes (deja genere a part). Base-toi sur ce JSON :\\n\\n${JSON.stringify({ anomalies, nombreCampagnes: payload.nombreCampagnes, resumeCampagnes: payload.resumeCampagnes }, null, 2)}`;\n\nreturn [{ json: { ...payload, prompt, performanceTableMarkdown, tableRows } }];"
+                                     },
+                      "id":  "pia-analyze",
+                      "name":  "Analyze — Output A (table) + anomalies",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       740,
+                                       120
+                                   ],
+                      "notesInFlow":  true,
+                      "notes":  "Output A = tableau type LP. Analyze + tendances 7j vs 7j."
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.anthropic.com/v1/messages",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "anthropic-version",
+                                                                                         "value":  "2023-06-01"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ JSON.stringify({ model: \u0027claude-sonnet-4-20250514\u0027, max_tokens: 4096, messages: [{ role: \u0027user\u0027, content: $json.prompt }] }) }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "pia-claude",
+                      "name":  "Interpret — Claude Output B [CREDENTIALS]",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       980,
+                                       120
+                                   ],
+                      "notesInFlow":  true,
+                      "notes":  "Output B = Performance Intelligence Report narratif (LP)."
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const analyze = $(\u0027Analyze — Output A (table) + anomalies\u0027).first().json;\nconst table = analyze.performanceTableMarkdown || \u0027(aucune ligne)\u0027;\nconst claude = $input.first().json;\nconst narrative = claude.content \u0026\u0026 claude.content[0] ? claude.content[0].text : JSON.stringify(claude);\nconst d = new Date();\nconst iso = d.toISOString().slice(0, 10);\nconst body = [\n  \u0027A – Analyse de performance automatisée (synthèse structurée)\u0027,\n  \u0027\u0027,\n  \u0027Tableau : Campagne, CPA, Delta, CTR, CVR, IS Lost, Anomalie, Statut (aligné page produit Automation Act).\u0027,\n  \u0027\u0027,\n  table,\n  \u0027\u0027,\n  \u0027---\u0027,\n  \u0027\u0027,\n  \u0027B – Performance Intelligence Report\u0027,\n  \u0027\u0027,\n  narrative,\n].join(\u0027\\n\u0027);\nreturn [{ json: { subject: \u0027Performance Intelligence Report — \u0027 + iso, body } }];"
+                                     },
+                      "id":  "pia-assemble",
+                      "name":  "Recommend — Assembler A + B (email)",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1220,
+                                       120
+                                   ],
+                      "notesInFlow":  true,
+                      "notes":  "Corps email = Output A + Output B comme sur automationact.com/google-ads-performance-intelligence-agent/"
+                  },
+                  {
+                      "parameters":  {
+                                         "resource":  "message",
+                                         "operation":  "send",
+                                         "sendTo":  "={{ $env.PIA_REPORT_EMAIL_TO || \u0027vous@exemple.com\u0027 }}",
+                                         "subject":  "={{ $json.subject }}",
+                                         "emailType":  "text",
+                                         "message":  "={{ $json.body }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "pia-gmail",
+                      "name":  "Gmail — Envoyer rapport [CREDENTIALS]",
+                      "type":  "n8n-nodes-base.gmail",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       1460,
+                                       120
+                                   ],
+                      "webhookId":  "",
+                      "notesInFlow":  true,
+                      "notes":  "Livraison hebdo (LP etape 8). Slack possible en variante."
+                  }
+              ]
+}
