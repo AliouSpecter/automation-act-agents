@@ -1,0 +1,156 @@
+﻿{
+    "name":  "Agent 2 â€” Search Terms Triage",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "search-terms-triage",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "ag2-node-01",
+                      "name":  "Webhook",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2,
+                      "position":  [
+                                       240,
+                                       300
+                                   ],
+                      "webhookId":  "search-terms-triage"
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "// Parse input + build prompts per batch\n// Accepts: { terms: string[] } or { csv: \"term1\\nterm2\" }\n\nconst BATCH_SIZE = 150;\n\nconst body = $input.first().json.body ?? $input.first().json;\nlet terms = [];\n\nif (body.terms \u0026\u0026 Array.isArray(body.terms)) {\n  terms = body.terms.map(t =\u003e String(t).trim()).filter(Boolean);\n} else if (typeof body.csv === \"string\") {\n  terms = body.csv.split(\"\\n\").map(t =\u003e t.trim()).filter(Boolean);\n} else {\n  throw new Error(\"Body requis : { terms: string[] } ou { csv: string }\");\n}\n\nif (terms.length === 0) throw new Error(\"Aucun terme recu.\");\n\nconst batches = [];\nfor (let i = 0; i \u003c terms.length; i += BATCH_SIZE) {\n  batches.push(terms.slice(i, i + BATCH_SIZE));\n}\n\nreturn batches.map((batch, idx) =\u003e {\n  const numbered = batch.map((t, i) =\u003e `${i + 1}. ${t}`).join(\"\\n\");\n  return {\n    json: {\n      totalTerms: terms.length,\n      batchIndex: idx,\n      batchCount: batches.length,\n      userMsg: `Classifie ces ${batch.length} termes Google Ads :\\n${numbered}\\n\\nTableau JSON : [{\"term\":\"...\",\"intent\":\"...\",\"action\":\"...\",\"match_type\":\"...\",\"theme\":\"...\"}]`\n    }\n  };\n});\n"
+                                     },
+                      "id":  "ag2-node-02",
+                      "name":  "Parse \u0026 Batch",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       500,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://api.anthropic.com/v1/messages",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "anthropic-version",
+                                                                                         "value":  "2023-06-01"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{ JSON.stringify({ model: \u0027claude-haiku-4-5-20251001\u0027, max_tokens: 4096, system: \u0027Tu es un specialiste Google Ads expert en triage de termes de recherche. Classifie chaque terme avec ces 4 champs : intent (commercial|informational|transactional|navigational|brand|irrelevant), action (keep|negative|review), match_type (exact|phrase|broad - recommandation pour les termes keep), theme (label court 3 mots max dans la langue du terme). Regles : keep=intention achat forte pertinent campagne paid, negative=hors-sujet informatif generique concurrent, review=ambigu contexte-dependant. Reponds UNIQUEMENT avec un tableau JSON valide sans explication ni markdown.\u0027, messages: [{ role: \u0027user\u0027, content: $json.userMsg }] }) }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "ag2-node-03",
+                      "name":  "Claude â€” Classify Batch",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       760,
+                                       300
+                                   ],
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "YOUR_ANTHROPIC_CREDENTIAL_ID",
+                                                                 "name":  "Anthropic Header Auth"
+                                                             }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "// Aggregate all batch results + compute stats\nconst allItems = $input.all();\nlet allClassified = [];\n\nfor (const item of allItems) {\n  const responseBody = item.json;\n  // Claude response format: { content: [{type: \u0027text\u0027, text: \u0027...\u0027}], ... }\n  const text = responseBody.content \u0026\u0026 responseBody.content[0] ? responseBody.content[0].text : JSON.stringify(responseBody);\n  const match = text.match(/\\[[\\s\\S]*\\]/);\n  if (!match) throw new Error(`Reponse Claude non-JSON : ${text.substring(0, 200)}`);\n  const classified = JSON.parse(match[0]);\n  allClassified = allClassified.concat(classified);\n}\n\nconst stats = {\n  total: allClassified.length,\n  keep: allClassified.filter(t =\u003e t.action === \"keep\").length,\n  negative: allClassified.filter(t =\u003e t.action === \"negative\").length,\n  review: allClassified.filter(t =\u003e t.action === \"review\").length\n};\n\nconst byTheme = {};\nfor (const t of allClassified) {\n  const theme = t.theme || \"Autre\";\n  if (!byTheme[theme]) byTheme[theme] = [];\n  byTheme[theme].push(t.term);\n}\n\nreturn [{ json: { stats, themes: byTheme, terms: allClassified } }];\n"
+                                     },
+                      "id":  "ag2-node-04",
+                      "name":  "Aggregate Results",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1020,
+                                       300
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ $json }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "ag2-node-05",
+                      "name":  "Respond",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       1280,
+                                       300
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "Parse \u0026 Batch",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "Parse \u0026 Batch":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "Claude â€” Classify Batch",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Claude â€” Classify Batch":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Aggregate Results",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Aggregate Results":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Respond",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "staticData":  null
+}
